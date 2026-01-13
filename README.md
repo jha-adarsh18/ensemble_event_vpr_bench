@@ -65,7 +65,7 @@ This repository contains the official codebase for the paper:
 
 Compared to conventional cameras, event cameras provide a high dynamic range and low latency, offering greater robustness to rapid motion and challenging lighting conditions. Although the potential of event cameras for visual place recognition (VPR) has been established, developing robust VPR frameworks under severe illumination changes remains an open research problem.
 
-In this paper, we introduce an **ensemble-based approach** to event camera place recognition that combines sequence-matched results from multiple event-to-frame reconstructions, VPR feature extractors, and temporal resolutions. Our broader fusion strategy delivers significantly improved robustness under varied lighting conditions, achieving a **57% relative improvement in Recall@1** across day-night transitions.
+In this paper, we introduce an **ensemble-based approach** to event camera place recognition that combines sequence-matched results from multiple event-to-frame reconstructions, VPR feature extractors, and temporal resolutions. Our broader fusion strategy delivers significantly improved robustness under varied lighting conditions, achieving a **77% relative improvement in Recall@1** across day-night transitions.
 
 ---
 
@@ -93,6 +93,9 @@ python load_and_save.py --dataset_type Brisbane --reconstruct_method_name eventC
 
 ```
 
+The filename convention is the following:
+@{utm_east:.6f}@{utm_north:.6f}@{prefix}_{id}@.jpg
+
 ### 2. Individual VPR Evaluation
 
 Run a specific VPR method (e.g., MixVPR, NetVLAD, CosPlace) on the reconstructed frames.
@@ -104,7 +107,7 @@ python testing.py --method mixvpr --dataset_type NSAVP --reconstruct_method_name
 
 ### 3. Running Ensembles (`ablate_ensembles.py`)
 
-This script implements the core contribution of the paper: fusing results from different configurations to improve robustness. It applies the **modified sequence matching** framework and calculates the combined Recall@1.
+This script implements the core contribution of the paper: fusing results from different configurations to improve robustness. It applies the ensembling framework and calculates the combined Recall@1.
 
 To run an ensemble over multiple VPR methods and reconstructions:
 
