@@ -14,8 +14,8 @@ def default_args_testing():
     parser_train.add_argument("--dataset_type", type=str, default="Brisbane", help="dataset type (e.g., Brisbane, NSAVP)")
     
     parser_train.add_argument("--reconstruct_method_name", type=str, default="timeSurface", help="Reconstruction method name (e.g., eventCount, timeSurface, e2vid)")
-    parser_train.add_argument("--ref_seq_idx", type=int, default=6, help="Reference sequence index")
-    parser_train.add_argument("--qry_seq_idx", type=int, default=7, help="Query sequence index")
+    parser_train.add_argument("--ref_seq_idx", type=int, default=0, help="Reference sequence index")
+    parser_train.add_argument("--qry_seq_idx", type=int, default=1, help="Query sequence index")
     parser_train.add_argument("--seq_len", type=int, default=1, help="Sequence length for VPR")
     parser_train.add_argument("--patch_or_frame", type=str, default="frame", help="Use 'patch' for patch-based, 'frame' for frame-based reconstruction")
     parser_train.add_argument("--patch_num_cols", type=int, default="2", help="Num patch columns for patch-based reconstruction")

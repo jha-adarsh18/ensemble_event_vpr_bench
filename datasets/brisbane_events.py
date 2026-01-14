@@ -482,8 +482,8 @@ class BrisbaneEventDataset(BaseDataset):
             assert np.allclose(bin_starts[1:], bin_ends[:-1], atol=1e-8), "Bins overlap or have gaps"
 
             # --- Plot dynamics ---
-            plot_vels_accs_bins(bin_starts, bin_durs, bin_speeds, bin_ang_vels,
-                                uniform_times, lin_acc, ang_acc, gt_positions[:, 0], gt_positions[:, 1], sequence_name)
+            # plot_vels_accs_bins(bin_starts, bin_durs, bin_speeds, bin_ang_vels,
+            #                     uniform_times, lin_acc, ang_acc, gt_positions[:, 0], gt_positions[:, 1], sequence_name)
 
 
         # --- Load and slice events ---
@@ -511,7 +511,97 @@ class BrisbaneEventDataset(BaseDataset):
 
         return np.array(array_3d), np.array(gt_positions)
 
+    def process_sequence_by_name(self, args, sequence_name, reconstructor):
+        """
+        Processes a specific traverse by name. Handles GPS loading, loop-closure cropping, 
+        dynamics computation, and event-to-frame reconstruction.
+        """
+        # --- 1. Load GPS & Metadata ---
+        is_training_seq = "_training" in sequence_name
+        latlon, gps_times = self.load_gps(sequence_name, args)
+        
+        if len(latlon) == 0 or len(gps_times) == 0:
+            print(f"Error: No GPS data found for {sequence_name}")
+            return None, None
 
+        # --- 2. Coordinate Transformation & Trajectory Cropping ---
+        # Convert raw Lat/Lon to UTM meters for metric calculations
+        utm_coords = convert_latlon_to_utm(latlon)
+
+        # For VPR evaluation, we crop to the first self-loop to ensure ground truth matches
+        if not is_training_seq:
+            gps_times += self.video_beginning[sequence_name]
+            loop_id_start, loop_id_end = find_first_self_loop(utm_coords, threshold=10.0, min_gap=20)
+            
+            if loop_id_start is None:
+                print(f"Warning: No loop closure found for {sequence_name}. Using full trajectory.")
+                loop_id_start, loop_id_end = 0, len(utm_coords) - 1
+                
+            gps_times = gps_times[loop_id_start:loop_id_end + 1]
+            utm_coords = utm_coords[loop_id_start:loop_id_end + 1]
+        else:
+            # Training sequence logic (omitted for brevity, keep your existing crop_margin_us logic here)
+            gps_times += self.video_beginning[sequence_name]
+
+        # --- 3. Interpolation ---
+        # Create continuous UTM trajectory for any arbitrary timestamp
+        interp_x = interp1d(gps_times, utm_coords[:, 0], bounds_error=False, fill_value="extrapolate")
+        interp_y = interp1d(gps_times, utm_coords[:, 1], bounds_error=False, fill_value="extrapolate")
+        
+        # Sample at high resolution for dynamics computation
+        uniform_times = np.arange(gps_times[0], gps_times[-1], args.min_time_res)
+        utm_interp = np.stack([interp_x(uniform_times), interp_y(uniform_times)], axis=1)
+
+        # --- 4. Dynamics Computation (Speed, Angular Velocity) ---
+        window_size = int(1 / args.min_time_res)
+        headings = self.compute_headings(utm_interp)
+        ang_vel = self.compute_angular_velocity(headings, uniform_times, window_size)
+        speed, _ = self.compute_speeds(utm_interp, uniform_times)
+
+        # --- 5. Binning Logic (Fixed Count vs Fixed Time) ---
+        events = self.load_events(sequence_name)
+        t_events = events['t']
+
+        if args.count_bin == 1:
+            # Event-count binning: Bins contain exactly N events
+            n_events = len(t_events)
+            start_idxs = np.arange(0, n_events, args.events_per_bin)
+            end_idxs = np.minimum(start_idxs + args.events_per_bin, n_events)
+            
+            bin_starts = t_events[start_idxs]
+            bin_ends = t_events[end_idxs - 1]
+            print(f"Binning: Fixed Count ({args.events_per_bin}). Total bins: {len(bin_starts)}")
+        else:
+            # Fixed-time binning: Bins contain events from a duration of T seconds
+            bin_size = args.time_res
+            bin_starts = np.arange(uniform_times[0], uniform_times[-1] - bin_size, bin_size)
+            bin_ends = bin_starts + bin_size
+            print(f"Binning: Fixed Time ({args.time_res}s). Total bins: {len(bin_starts)}")
+
+        # Get GT positions at the start of each bin for VPR Ground Truth
+        gt_positions = np.stack([interp_x(bin_starts), interp_y(bin_starts)], axis=1)
+
+        # --- 6. Event Slicing & Reconstruction ---
+        start_idxs = np.searchsorted(t_events, bin_starts, side='left')
+        end_idxs = np.searchsorted(t_events, bin_ends, side='right')
+        
+        # Filter out empty bins
+        valid_mask = start_idxs != end_idxs
+        start_idxs, end_idxs = start_idxs[valid_mask], end_idxs[valid_mask]
+        gt_positions = gt_positions[valid_mask]
+
+        # Call the reconstruction method (e.g., E2VID, EventCount)
+        hp_path = os.path.join(self.base_path, 'paraquet_data', sequence_name, 'hot_pixels.txt')
+        array_3d, _ = reconstructor.reconstruct(
+            eventsData=events,
+            sensor_size=self.sensor_size,
+            start_indices=start_idxs,
+            end_indices=end_idxs,
+            hp_loc=hp_path if os.path.exists(hp_path) else None
+        )
+
+        return np.array(array_3d), np.array(gt_positions)
+        
     def save_training_split(self, args):
         """
         Save the training split for the Brisbane dataset.
@@ -742,24 +832,4 @@ class Brisbane_RGB_Dataset(BaseDataset):
 
 
 
-# elif args.adaptive_bin == 1:
-#     bin_starts, bin_ends, bin_durs, bin_speeds, bin_ang_vels = [], [], [], [], []
-#     i = 0
-#     while i < len(uniform_times) - 1:
-#         cur_vals = (ang_vel[i], speed[i], ang_acc[i], lin_acc[i])
-#         bin_size = max(1, adaptive_bin_size(*cur_vals, ang_acc_max=args.max_odom[0],
-#                                             ang_vel_max=args.max_odom[1], 
-#                                             lin_speed_max=args.max_odom[2],
-#                                             lin_acc_max=args.max_odom[3],
-#                                             max_bins=args.max_bins, weights=args.odom_weights, 
-#                                             use_exponential=args.use_exponential))
-#         i_end = int(min(i + bin_size, len(uniform_times) - 1))
-#         bin_starts.append(uniform_times[i])
-#         bin_ends.append(uniform_times[i_end])
-#         bin_durs.append(uniform_times[i_end] - uniform_times[i])
-#         bin_speeds.append(speed[i])
-#         bin_ang_vels.append(ang_vel[i])
-#         i = i_end
-#     bin_starts = np.array(bin_starts)
-#     bin_ends = np.array(bin_ends)
-#     bin_durs = np.array(bin_durs)
+

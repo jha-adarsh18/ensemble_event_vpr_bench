@@ -1,10 +1,30 @@
 logs/
 hpc/jobs/
 hpc/outputs/
-vpr_methods_evaluation/trained_models/
-e2vid/pretrained/
-plots/videos/R0_RN0_timeSurface_1.0.mp4/
-plots/videos/R0_RN0_eventCount_noPolarity_1.0.mp4/
-plots/videos/R0_RN0_timeSurface_1.0.mp4/
 depreciated/
-plots/
+crop_event_data.py
+
+# Environment and IDE
+.vscode/
+.idea/
+venv/
+.env
+
+# System files
+.DS_Store
+
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+**/*.pyc
+
+# Data and Artifacts
+image_reconstructions/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+**/*.pyc

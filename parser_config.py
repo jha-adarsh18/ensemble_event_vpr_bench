@@ -51,7 +51,7 @@ default_config = {
         'min_time_res': 0.01,
         'max_bins': 50, 
         'adaptive_bin': 0,
-        'dataset_path': "/mnt/hpccs01/home/n10234764/data/BrisbaneEvent",
+        'dataset_path': "/home/therese/Documents/Datasets/BrisbaneEventSample",
         'start_idx': 0,
         'end_idx': None,
         'dist_thresh': 10,
