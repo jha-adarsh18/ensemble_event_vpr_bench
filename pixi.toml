@@ -8,7 +8,7 @@ platforms = ["linux-64"] # Assumes you are on Linux
 
 [tasks]
 # 1. Task to download data automatically
-download-data = """
+download-sample-data = """
     git clone https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench && 
     cd datasample_for_ensem_event_bench && 
     git lfs install && 
@@ -16,10 +16,18 @@ download-data = """
 """
 
 # 2. Task to run reconstruction (shortcut)
-reconstruct-nsavp = "python load_and_save.py --dataset_type NSAVP --reconstruct_method_name timeSurface --time_res 1.0"
+reconstruct-nsavp = """
+python load_and_save.py --dataset_type NSAVP --reconstruct_method_name e2vid --time_res 1.0 && 
+python load_and_save.py --dataset_type NSAVP --reconstruct_method_name timeSurface --time_res 1.0 && 
+python load_and_save.py --dataset_type NSAVP --reconstruct_method_name eventCount --time_res 1.0 && 
+python load_and_save.py --dataset_type NSAVP --reconstruct_method_name eventCount_noPolarity --time_res 1.0"""
 
-# 3. Task to run testing (shortcut)
-test-mixvpr = "python testing.py --method mixvpr --dataset_type NSAVP --reconstruct_method_name e2vid --seq_len 10 --ref_seq_idx 9 --qry_seq_idx 10"
+reconstruct-brisbane = """
+python load_and_save.py --dataset_type Brisbane --reconstruct_method_name e2vid --time_res 1.0 && 
+python load_and_save.py --dataset_type Brisbane --reconstruct_method_name timeSurface --time_res 1.0 && 
+python load_and_save.py --dataset_type Brisbane --reconstruct_method_name eventCount --time_res 1.0 && 
+python load_and_save.py --dataset_type Brisbane --reconstruct_method_name eventCount_noPolarity --time_res 1.0"""
+
 
 [dependencies]
 python = "3.10.17.*"
