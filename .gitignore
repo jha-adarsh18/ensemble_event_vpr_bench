@@ -22,6 +22,10 @@ __pycache__/
 
 # Data and Artifacts
 image_reconstructions/
+h5_data/
+paraquet_data/
+datasample_for_ensem_event_bench/
+plots/ 
 
 # Python Cache
 __pycache__/

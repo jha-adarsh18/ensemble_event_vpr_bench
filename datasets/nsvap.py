@@ -163,6 +163,134 @@ class NSVAPDataset(BaseDataset):
 
         return np.array(frames), gt_positions
     
+    def process_sequence_by_name(self, args, sequence_name, reconstructor):
+        # 1. Sequence name is now passed directly (removed args/reforqry lookup)
+        
+        # Load GPS and setup paths
+        gps_pos, gps_times = self.load_gps(sequence_name)
+        events_path = os.path.join(self.base_path, "h5_data", f"{sequence_name}_dvxplorer_left.h5")
+
+        # Interpolate GPS to uniform time grid
+        interp_x = interp1d(gps_times, gps_pos[:, 0], bounds_error=False, fill_value="extrapolate")
+        interp_y = interp1d(gps_times, gps_pos[:, 1], bounds_error=False, fill_value="extrapolate")
+        uniform_times = np.arange(gps_times[0], gps_times[-1], args.min_time_res)
+        utm_interp = np.stack([interp_x(uniform_times), interp_y(uniform_times)], axis=1)
+
+        # Calculate Kinematics
+        window_size = int(1 / args.min_time_res)
+        headings = compute_headings(utm_interp)
+        ang_vel = compute_angular_velocity(headings, uniform_times, window_size)
+        speed = compute_speeds(utm_interp, uniform_times)
+        lin_acc, ang_acc = compute_acceleration(speed, ang_vel, uniform_times, window_size)
+
+        # --- Bin generation ---
+        start_idxs = None # Initialize to ensure scope visibility
+        end_idxs = None
+
+        if args.count_bin == 1:
+            with h5py.File(events_path, "r") as f:
+                t_dset = f["events/timestamps"]
+                total_events = t_dset.shape[0]
+                usable_events = int(total_events * self.data_fraction)
+
+                duration_s = (t_dset[usable_events - 1] - t_dset[0]) * 1e-9
+                print(f"Traverse duration: {duration_s / 60:.1f} minutes", flush=True)
+
+                events_per_bin = int(args.events_per_bin)
+                # Create indices for count-based bins
+                start_idxs = np.arange(0, usable_events, events_per_bin)
+                end_idxs = np.minimum(start_idxs + events_per_bin, usable_events)
+
+                bin_starts = t_dset[start_idxs] * 1e-9
+                bin_ends = t_dset[end_idxs - 1] * 1e-9
+
+            bin_durs = bin_ends - bin_starts
+            bin_mids = (bin_starts + bin_ends) / 2
+            gt_positions = np.stack([interp_x(bin_mids), interp_y(bin_mids)], axis=1)
+
+        elif args.adaptive_bin == 1:
+            bin_starts, bin_ends, bin_durs, bin_speeds, bin_ang_vels = [], [], [], [], []
+            i = 0
+            while i < len(uniform_times) - 1:
+                cur_vals = (ang_vel[i], speed[i], ang_acc[i], lin_acc[i])
+                bin_size = max(1, adaptive_bin_size(*cur_vals, ang_acc_max=args.max_odom[0],
+                                                    ang_vel_max=args.max_odom[1], 
+                                                    lin_speed_max=args.max_odom[2],
+                                                    lin_acc_max=args.max_odom[3],
+                                                    max_bins=args.max_bins, weights=args.odom_weights, 
+                                                    use_exponential=args.use_exponential))
+                i_end = int(min(i + bin_size, len(uniform_times) - 1))
+                bin_starts.append(uniform_times[i])
+                bin_ends.append(uniform_times[i_end])
+                bin_durs.append(uniform_times[i_end] - uniform_times[i])
+                bin_speeds.append(speed[i])
+                bin_ang_vels.append(ang_vel[i])
+                i = i_end
+
+            bin_starts = np.array(bin_starts)
+            bin_ends = np.array(bin_ends)
+            bin_mids = (bin_starts + bin_ends) / 2
+            gt_positions = np.stack([interp_x(bin_starts), interp_y(bin_starts)], axis=1)
+
+            assert np.allclose(bin_starts[1:], bin_ends[:-1], atol=1e-8), "Bins overlap or have gaps"
+
+            plot_vels_accs_bins(bin_starts, bin_durs, bin_speeds, bin_ang_vels,
+                                uniform_times, lin_acc, ang_acc,
+                                gt_positions[:, 0], gt_positions[:, 1], sequence_name)
+
+        else:
+            bin_size = args.time_res
+            bin_starts = np.arange(uniform_times[0], uniform_times[-1] - bin_size, bin_size)
+            bin_ends = bin_starts + bin_size
+            bin_mids = (bin_starts + bin_ends) / 2
+            gt_positions = np.stack([interp_x(bin_starts), interp_y(bin_starts)], axis=1)
+        
+        print(f"Bin durations: {np.unique(bin_ends - bin_starts)} (s), total bins: {len(bin_starts)}", flush=True)
+        
+        # --- Trim to only bins after the first movement ---
+        movement_mask = speed > 0
+        if not np.any(movement_mask):
+            raise ValueError(f"No movement detected in sequence {sequence_name}; cannot reconstruct.")
+        first_moving_time = uniform_times[np.argmax(movement_mask)]
+        valid_bin_mask = bin_starts >= first_moving_time
+        
+        # Apply mask to bin data
+        bin_starts = bin_starts[valid_bin_mask]
+        bin_ends = bin_ends[valid_bin_mask]
+        gt_positions = gt_positions[valid_bin_mask]
+
+        # Plotting (Optional)
+        import matplotlib.pyplot as plt
+        os.makedirs("./plots", exist_ok=True)
+        plt.plot(gps_pos[:, 0], gps_pos[:, 1], 'k-', label='GPS Path')
+        plt.savefig(f"./plots/{sequence_name}_gps_path.png")
+        plt.close()
+
+        # --- Reconstruct ---
+        events = self.load_events(sequence_name)
+        t_events = events['t']
+
+        if args.count_bin != 1:
+            # For time/adaptive bins, we need to find indices in event array now
+            start_idxs = np.searchsorted(t_events, bin_starts, side='left')
+            end_idxs = np.searchsorted(t_events, bin_ends, side='right')
+        else:
+            # For count bins, indices were already calculated, just filter them
+            start_idxs = start_idxs[valid_bin_mask]
+            end_idxs = end_idxs[valid_bin_mask]
+            
+        print(f"Reconstructing {len(start_idxs)} bins for sequence {sequence_name}", flush=True)
+
+        frames, _ = reconstructor.reconstruct(
+            eventsData=events,
+            sensor_size=self.sensor_size,
+            start_indices=start_idxs,
+            end_indices=end_idxs)
+
+        return np.array(frames), gt_positions
+
+
+    
 class NSAVP_RGB_Dataset(BaseDataset):
     def __init__(self, base_path):
         super().__init__(base_path)
@@ -213,7 +341,7 @@ class NSAVP_RGB_Dataset(BaseDataset):
         interpolated_positions = np.stack(interpolated_positions, axis=1)
 
         return images, interpolated_positions
-
+    
 
     # def process_sequence(self, args, reforqry, reconstructor):
     #     sequence_name = args.sequences[args.ref_seq_idx if reforqry == 'ref' else args.qry_seq_idx]
