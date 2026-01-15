@@ -86,7 +86,7 @@ In this paper, we introduce an **ensemble-based approach** to event camera place
 
 Download the [**NSAVP**](https://deepblue.lib.umich.edu/data/collections/v118rf157) and [**BrisbaneEvent**](https://huggingface.co/datasets/TobiasRobotics/brisbane-event-vpr/tree/main) datasets from their respective locations for the full experimental suite.
 
-To quickly test and verify this repository and its methods, a **sample dataset** is available on [Hugging Face](https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench/) which follows the expected folder structure.
+To quickly test and verify this repository and its methods, a **sample dataset** is available on [Hugging Face](https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench/) which follows the expected folder structure. Modify the filepath in `parser_config.py` to point to the datasets to ensure all scripts can run. 
 
 ### 2. Data Reconstruction
 
