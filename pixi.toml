@@ -1,0 +1,62 @@
+[workspace]
+name = "ensemble_event_bench"
+version = "0.1.0"
+description = "Event-based VPR Benchmark"
+authors = ["Therese Joseph <t3.joseph@qut.edu.au>"]
+channels = ["conda-forge", "pytorch"] # Pulls packages from conda-forge
+platforms = ["linux-64"] # Assumes you are on Linux
+
+[tasks]
+# 1. Task to download data automatically
+download-data = """
+    git clone https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench && 
+    cd datasample_for_ensem_event_bench && 
+    git lfs install && 
+    git lfs pull
+"""
+
+# 2. Task to run reconstruction (shortcut)
+reconstruct-nsavp = "python load_and_save.py --dataset_type NSAVP --reconstruct_method_name timeSurface --time_res 1.0"
+
+# 3. Task to run testing (shortcut)
+test-mixvpr = "python testing.py --method mixvpr --dataset_type NSAVP --reconstruct_method_name e2vid --seq_len 10 --ref_seq_idx 9 --qry_seq_idx 10"
+
+[dependencies]
+python = "3.10.17.*"
+pip = "*"
+# Conda-based dependencies
+faiss = "1.9.0.*"
+matplotlib = "3.10.3.*"
+tqdm = "4.67.1.*"
+requests = "2.32.3.*"
+pillow = "*"
+numpy = "1.24.4.*"
+
+[pypi-dependencies]
+torch = "==2.5.1"
+torchvision = "==0.20.1"
+torchaudio = "==2.5.1"
+
+# Computer Vision & Event Processing
+opencv-python = "==4.11.0.86"
+tonic = "==1.6.0"
+einops = "==0.8.1"
+
+# Data Science & ML
+scikit-learn = "==1.6.1"
+scipy = "==1.10.1"
+pandas = "==2.2.3"
+h5py = "==3.13.0"
+optuna = "==4.4.0"
+fast-pytorch-kmeans = "==0.2.2"
+seaborn = "==0.13.2"
+
+# Utilities & Geospatial
+loguru = "==0.7.3"
+pyyaml = "==6.0.2"
+pyproj = "==3.7.1"
+geopy = "==2.4.1"
+geographiclib = "==2.0"
+pynmea2 = "==1.19.0"
+pyarrow = "==20.0.0"
+gdown = "==5.2.0"

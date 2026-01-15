@@ -26,9 +26,12 @@ h5_data/
 paraquet_data/
 datasample_for_ensem_event_bench/
 plots/ 
+hpc_scripts_and_results/
 
 # Python Cache
 __pycache__/
 *.py[cod]
 *$py.class
-**/*.pyc
+**/*.pyc# pixi environments
+.pixi/*
+!.pixi/config.toml

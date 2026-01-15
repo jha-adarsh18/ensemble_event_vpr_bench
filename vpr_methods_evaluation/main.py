@@ -863,7 +863,8 @@ def run_vpr_save_results(args):
     csv_path = Path(f'./results/seqMatch_vs_modified_results_fixed_timebins.csv')
     args.time_res = None if args.count_bin == 1 else args.time_res
     simMatPath = Path("logs") / args.log_dir / f"{ref_seq}_vs_{qry_seq}_{args.method}_{metric}_reconstruct_{args.reconstruct_method_name}_{args.time_res}_{args.patch_or_frame}_{args.patch_num_rows}_{args.patch_num_cols}.npy"
-
+    simMatPath.parent.mkdir(parents=True, exist_ok=True)
+    
     if args.idR >= 12 or args.idQ >= 12:
         csv_path = Path(f'./hpc/patch_grid_search_results1.csv')
         args.saveSimMat = False

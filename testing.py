@@ -1,4 +1,4 @@
-from load_and_save import load_save_data
+from load_and_save import load_save_data, args_for_load_save
 from vpr_methods_evaluation.main import run_vpr_save_results, run_vpr, run_vpr_fill_auc
 from vpr_methods_evaluation import parse
 from parser_config import get_parser, apply_defaults
@@ -49,47 +49,50 @@ def default_args_testing():
 
 
 
-def args_for_load_save(args_cli, reconstruct_method_name):
-    parser = get_parser()
-    args = parser.parse_args([])
-    args.dataset_type = args_cli.dataset_type
-    args = apply_defaults(args)
-    args.reconstruct_method_name = reconstruct_method_name
+# def args_for_load_save(args_cli, reconstruct_method_name):
+#     parser = get_parser()
+#     args = parser.parse_args([])
+#     args = apply_defaults(args)
+#     args.reconstruct_method_name = reconstruct_method_name
 
-    # Override parsed args with specific values
-    args.adaptive_bin = args_cli.adaptive_bin
-    args.max_odoms = args_cli.max_odoms
-    args.odom_weights = args_cli.odom_weights
-    args.max_bins = args_cli.max_bins
-    args.save_frames_video = 0
-    args.sequences = args_cli.sequences
-    args.adaptive_bin_tag = args_cli.bin_tag
-    args.use_exponential = args_cli.use_exponential  # Use exponential binning if True, linear otherwise
-    args.time_res = args_cli.time_res
-    args.count_bin = args_cli.count_bin  # 1 for event count binning, 0 for time binning
-    args.events_per_bin = args_cli.events_per_bin  # Number of events per bin for eventCount reconstruction
+#     args.dataset_type = args_cli.dataset_type
+#     args.dataset_path = args_cli.dataset_path
 
-    # Initialize dataset and reconstructor based on the parameters.
-    if args.dataset_type.lower() == 'nsavp':
-        dataset = NSVAPDataset(args.dataset_path)
-    elif args.dataset_type.lower() == 'brisbane':
-        dataset = BrisbaneEventDataset(args.dataset_path)
-    else:
-        raise ValueError("Unsupported dataset type")
+#     # Override parsed args with specific values
+#     args.adaptive_bin = args_cli.adaptive_bin
+#     args.max_odoms = args_cli.max_odoms
+#     args.odom_weights = args_cli.odom_weights
+#     args.max_bins = args_cli.max_bins
+#     args.save_frames_video = 0
+#     args.sequences = args_cli.sequences
+#     args.adaptive_bin_tag = args_cli.bin_tag
+#     args.use_exponential = args_cli.use_exponential  # Use exponential binning if True, linear otherwise
+#     args.time_res = args_cli.time_res
+#     args.count_bin = args_cli.count_bin  # 1 for event count binning, 0 for time binning
+#     args.events_per_bin = args_cli.events_per_bin  # Number of events per bin for eventCount reconstruction
 
-    # Dynamically construct the module path
-    if args.reconstruct_method_name!= 'RGB_camera':
-        module_path = f"reconstruction.{args.reconstruct_method_name}"
-        reconstruction_module = importlib.import_module(module_path)
-        reconstructor_class = getattr(reconstruction_module, "EventReconstructor")
-        reconstructor = reconstructor_class() 
-    elif args.reconstruct_method_name == 'RGB_camera' and args.dataset_type.lower() == 'brisbane':
-        reconstructor=None
-        dataset = Brisbane_RGB_Dataset(args.dataset_path)
+#     # Initialize dataset and reconstructor based on the parameters.
+#     if args.dataset_type.lower() == 'nsavp':
+#         dataset = NSVAPDataset(args.dataset_path)
+#     elif args.dataset_type.lower() == 'brisbane':
+#         dataset = BrisbaneEventDataset(args.dataset_path)
+#     else:
+#         raise ValueError("Unsupported dataset type")
+
+#     # Dynamically construct the module path
+#     if args.reconstruct_method_name!= 'RGB_camera':
+#         module_path = f"reconstruction.{args.reconstruct_method_name}"
+#         reconstruction_module = importlib.import_module(module_path)
+#         reconstructor_class = getattr(reconstruction_module, "EventReconstructor")
+#         reconstructor = reconstructor_class() 
+#     elif args.reconstruct_method_name == 'RGB_camera' and args.dataset_type.lower() == 'brisbane':
+#         reconstructor=None
+#         dataset = Brisbane_RGB_Dataset(args.dataset_path)
     
-    print(args.dataset_type)
+#     print(args.dataset_type)
+#     print(args.dataset_path)
 
-    return args, dataset, reconstructor
+#     return args, dataset, reconstructor
 
 
 
@@ -148,9 +151,9 @@ def run_single_experiment():
     idQ = args_cli.qry_seq_idx  
     reconstruct_method_name = args_cli.reconstruct_method_name
     print(f"Running VPR for idR={idR}, idQ={idQ}, reconstruct_method_name={reconstruct_method_name}")
-    # reconstruct_method_name, idR, idQ, ref_qry_lens = process_pair(args_cli, reconstruct_method_name, idR, idQ)
+    reconstruct_method_name, idR, idQ, ref_qry_lens = process_pair(args_cli, reconstruct_method_name, idR, idQ)
     args_vpr = args_for_vpr(args_cli, reconstruct_method_name, idR, idQ)
-    recall_at_1 = run_vpr_save_results(args_vpr)
+    recall_at_1,auc = run_vpr(args_vpr)
     
     print(f"Recall at 1: {recall_at_1}")
 
