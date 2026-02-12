@@ -11,6 +11,8 @@ import argparse
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 import os
+import subprocess
+import sys
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -22,7 +24,53 @@ def parse_args():
     parser.add_argument('--recon_methods', required=True)
     parser.add_argument('--time_strs', required=True)
     parser.add_argument('--seq_len', type=int, default=1)
+    parser.add_argument('--dataset_path', type=str, default=None, help='Dataset path (optional)')
+    parser.add_argument('--auto_generate', action='store_true', help='Automatically generate missing similarity matrices')
     return parser.parse_args()
+
+
+def get_seq_idx_from_name(seq_name):
+    """Convert sequence name to index"""
+    seq_id_map = {
+        'night': 0, 'morning': 1, 'sunrise': 2, 'sunset1': 3, 'sunset2': 4, 'daytime': 5,
+        'R0_FA0': 6, 'R0_FS0': 7, 'R0_FN0': 8, 'R0_RA0': 9, 'R0_RS0': 10, 'R0_RN0': 11
+    }
+    return seq_id_map.get(seq_name, None)
+
+
+def run_testing_script(dataset_name, ref_seq, qry_seq, vpr_method, recon_method, time_str, seq_len, dataset_path=None):
+    """Run testing.py to generate missing similarity matrix"""
+    ref_idx = get_seq_idx_from_name(ref_seq)
+    qry_idx = get_seq_idx_from_name(qry_seq)
+    
+    if ref_idx is None or qry_idx is None:
+        print(f"[ERROR] Could not map sequence names to indices: {ref_seq}, {qry_seq}")
+        return False
+    
+    cmd = [
+        sys.executable, 'testing.py',
+        '--method', vpr_method,
+        '--dataset_type', dataset_name,
+        '--reconstruct_method_name', recon_method,
+        '--ref_seq_idx', str(ref_idx),
+        '--qry_seq_idx', str(qry_idx),
+        '--seq_len', str(seq_len),
+        '--time_res', str(time_str),
+        '--patch_or_frame', 'frame'
+    ]
+    
+    # Note: testing.py doesn't accept --dataset_path, it reads from parser_config.py
+    
+    print(f"\n[→] Generating similarity matrix: {vpr_method} + {recon_method} @ {time_str}s")
+    print(f"    Command: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=False, text=True)
+        print(f"[✓] Successfully generated similarity matrix")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"[✗] Failed to generate similarity matrix: {e}")
+        return False
 
 
 
@@ -318,7 +366,9 @@ def general_ensemble(
     ensemble_over: str = 'vpr',  # Options: 'vpr', 'recon', 'time', 'patch'
     seqLen: int = 1,
     result_row: dict = None,
-    csv_path: Path = None):
+    csv_path: Path = None,
+    auto_generate: bool = False,
+    dataset_path: str = None):
     import itertools
 
     if ref_name.startswith('R0_') or qry_name.startswith('R0_'):
@@ -330,8 +380,10 @@ def general_ensemble(
     suffix = '2_2' if ensemble_over == 'patch' else '1_1'
     mode = 'patch' if ensemble_over == 'patch' else 'frame'
     smat_list = []
+    member_names = []  # Track member names for reporting
     min_rows, min_cols = None, None
     count = 0
+    missing_files = []
 
     def subsample_smat(smat, step):
         nonlocal min_rows, min_cols
@@ -354,15 +406,15 @@ def general_ensemble(
                 for time_str in time_strs:
                     time_res = float(time_str)
                     step = int(1 / time_res)
-                    base_dir = Path(f"logs/{dataset_name}/fixed_timebins_{time_str}/")
-                    filename = f"{ref_name}_vs_{qry_name}_{vpr_method}_l2_reconstruct_{recon_method}_{time_str}_{mode}_{suffix}.npy"
+                    base_dir = Path(f"logs/fixed_timebins_{time_str}/")
+                    filename = f"{ref_name}_vs_{qry_name}_{vpr_method}_l2_reconstruct_{recon_method}_{time_str}_{mode}.npy"
                     file_path = base_dir / filename
                     if not file_path.exists():
                         print(f"[!] Missing: {file_path}")
-                        return
+                        missing_files.append((vpr_method, recon_method, time_str))
+                        continue
 
-                    dataset_folder = 'BrisbaneEvent' if dataset_name == 'Brisbane' else 'NSAVP'
-                    work_dir = f'../data/{dataset_folder}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
+                    work_dir = f'datasample_for_ensem_event_bench/{dataset_name}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
                     queries_folder = f"{work_dir}/{qry_name}"
                     database_folder = f"{work_dir}/{ref_name}"
                     test_ds = TestDataset(
@@ -378,6 +430,7 @@ def general_ensemble(
                     smat = np.load(file_path) # Load and crop similarity matrix
                     smat = subsample_smat(smat, step)
                     smat_list.append(smat)
+                    member_names.append(f"{vpr_method}+{recon_method}@{time_str}s")
                     count += 1
                     
     else:
@@ -386,15 +439,15 @@ def general_ensemble(
                 for time_str in time_strs if 'time' in ensemble_over else [time_strs[0]]:
                     time_res = float(time_str)
                     step = int(1 / time_res)
-                    base_dir = Path(f"logs/{dataset_name}/fixed_timebins_{time_str}/")
-                    filename = f"{ref_name}_vs_{qry_name}_{vpr_method}_l2_reconstruct_{recon_method}_{time_str}_{mode}_{suffix}.npy"
+                    base_dir = Path(f"logs/fixed_timebins_{time_str}/")
+                    filename = f"{ref_name}_vs_{qry_name}_{vpr_method}_l2_reconstruct_{recon_method}_{time_str}_{mode}.npy"
                     file_path = base_dir / filename
                     if not file_path.exists():
                         print(f"[!] Missing: {file_path}")
+                        missing_files.append((vpr_method, recon_method, time_str))
                         continue
 
-                    dataset_folder = 'BrisbaneEvent' if dataset_name == 'Brisbane' else 'NSAVP'
-                    work_dir = f'../data/{dataset_folder}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
+                    work_dir = f'datasample_for_ensem_event_bench/{dataset_name}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
                     queries_folder = f"{work_dir}/{qry_name}"
                     database_folder = f"{work_dir}/{ref_name}"
                     test_ds = TestDataset(
@@ -410,7 +463,37 @@ def general_ensemble(
                     smat = np.load(file_path) # Load and crop similarity matrix
                     smat = subsample_smat(smat, step)
                     smat_list.append(smat)
+                    member_names.append(f"{vpr_method}+{recon_method}@{time_str}s")
                     count += 1
+    
+    # Handle missing files
+    if missing_files:
+        print(f"\n[!] Found {len(missing_files)} missing similarity matrices")
+        if auto_generate:
+            print(f"[→] Auto-generating missing matrices...")
+            for vpr_method, recon_method, time_str in missing_files:
+                success = run_testing_script(
+                    dataset_name, ref_name, qry_name, 
+                    vpr_method, recon_method, time_str, 
+                    seqLen, dataset_path
+                )
+                if not success:
+                    print(f"[!] Failed to generate: {vpr_method}, {recon_method}, {time_str}")
+            
+            # Retry loading after generation
+            print(f"\n[→] Retrying ensemble after generation...")
+            return general_ensemble(
+                ref_name, qry_name, vpr_methods, recon_methods, time_strs,
+                ensemble_over, seqLen, result_row, csv_path, False, dataset_path
+            )
+        else:
+            print(f"\n[!] Please run with --auto_generate flag to automatically generate missing matrices.")
+            print(f"[!] Or manually run testing.py for each missing configuration.")
+            return
+    
+    if count == 0:
+        print(f"[!] No similarity matrices loaded. Exiting.")
+        return
 
     if min_rows is not None:
         min_rows = len(positives_per_query) if len(positives_per_query) < min_rows else min_rows
@@ -457,7 +540,21 @@ def general_ensemble(
     recall_max = compute_recall_at_1(max_smat, positives_per_query)
     recall_median = compute_recall_at_1(med_smat, positives_per_query)
 
-    print(f"\n{count} members — Recall@1 (mean): {recall_mean:.4f}, max: {recall_max:.4f}, median: {recall_median:.4f}, disagreement: {avg_disagreement:.4f}")
+    # Print individual member performance
+    print(f"\n{'='*70}")
+    print(f"Individual Member Performance:")
+    print(f"{'-'*70}")
+    for i, (name, recall) in enumerate(zip(member_names, individual_recalls), 1):
+        print(f"  {i}. {name:40s} Recall@1: {recall:.4f}")
+    
+    print(f"\n{'='*70}")
+    print(f"Ensemble Results ({count} members):")
+    print(f"{'-'*70}")
+    print(f"  Mean fusion:      Recall@1: {recall_mean:.4f}")
+    print(f"  Max fusion:       Recall@1: {recall_max:.4f}")
+    print(f"  Median fusion:    Recall@1: {recall_median:.4f}")
+    print(f"  Disagreement:     {avg_disagreement:.4f}")
+    print(f"{'='*70}\n")
     
     if result_row is not None:
         result_row.update({
@@ -483,7 +580,8 @@ if __name__ == "__main__":
         'time_strs': args.time_strs,
         'seqLen': args.seq_len,}
 
-    csv_path = Path(f'./hpc/ablate_ensemble_combination_additionalResults.csv')
+    csv_path = Path(f'./results/ablate_ensemble_combination.csv')
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     existing_df = load_existing_results(csv_path)
 
     if is_duplicate(result_row, existing_df):
@@ -498,6 +596,8 @@ if __name__ == "__main__":
         ensemble_over=args.ensemble_over,
         seqLen=args.seq_len,
         result_row=result_row,
-        csv_path=csv_path)
+        csv_path=csv_path,
+        auto_generate=args.auto_generate,
+        dataset_path=args.dataset_path)
 
 # python ablate_ensembles.py --dataset_name NSAVP --ref_seq R0_FN0 --qry_seq R0_FS0 --vpr_methods "mixvpr,megaloc,cosplace,netvlad" --recon_methods "e2vid,eventCount,eventCount_noPolarity,timeSurface" --time_strs "0.1,0.25,0.5,1.0" --ensemble_over all --seq_len 10
