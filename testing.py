@@ -1,17 +1,19 @@
 from load_and_save import load_save_data, args_for_load_save
 from vpr_methods_evaluation.main import run_vpr_save_results, run_vpr, run_vpr_fill_auc
 from vpr_methods_evaluation import parse
-from parser_config import get_parser, apply_defaults
+from parser_config import get_parser, apply_defaults, default_config
 from datasets.brisbane_events import BrisbaneEventDataset, Brisbane_RGB_Dataset
 from datasets.nsvap import NSVAPDataset, NSAVP_RGB_Dataset
 import importlib
 import argparse
 
 def default_args_testing():
+    print("Using default arguments for testing. Override with CLI args if needed.")
     parser_train = argparse.ArgumentParser()
 
     parser_train.add_argument("--method", type=str, default="mixvpr", help="vpr method to use")
     parser_train.add_argument("--dataset_type", type=str, default="Brisbane", help="dataset type (e.g., Brisbane, NSAVP)")
+    parser_train.add_argument("--dataset_path", type=str, default=None, help="Dataset path (override default from parser_config)")
     
     parser_train.add_argument("--reconstruct_method_name", type=str, default="timeSurface", help="Reconstruction method name (e.g., eventCount, timeSurface, e2vid)")
     parser_train.add_argument("--ref_seq_idx", type=int, default=0, help="Reference sequence index")
@@ -44,6 +46,15 @@ def default_args_testing():
      "morning_training", "sunrise_training", "sunset1_training", "sunset2_training", "daytime_training",]
     args_cli.dataset_type = 'NSAVP' if args_cli.ref_seq_idx >= 6 or args_cli.qry_seq_idx >= 6 else 'Brisbane'
     args_cli.dataset_type = 'Brisbane' if args_cli.ref_seq_idx >= 12 or args_cli.qry_seq_idx >= 12 else args_cli.dataset_type
+    
+    # Read dataset_path from parser_config based on dataset_type (or use CLI override if provided)
+    if args_cli.dataset_path is None:
+        if args_cli.dataset_type in default_config:
+            args_cli.dataset_path = default_config[args_cli.dataset_type]['dataset_path']
+        else:
+            raise ValueError(f"Unknown dataset_type: {args_cli.dataset_type}")
+    else:
+        print(f"Using CLI-provided dataset_path: {args_cli.dataset_path}")
     
     return args_cli
 
@@ -104,6 +115,7 @@ def args_for_vpr(args_cli, reconstruct_method_name, idR, idQ):
     args_vpr.idQ = idQ
     args_vpr.sequences = args_cli.sequences
     args_vpr.dataset_type = args_cli.dataset_type
+    args_vpr.dataset_path = args_cli.dataset_path
     args_vpr.reconstruct_method_name = reconstruct_method_name
     args_vpr.saveSimMat = True
     

@@ -4,7 +4,7 @@ import os
 import re
 import importlib
 from pathlib import Path
-from parser_config import get_parser, apply_defaults
+from parser_config import get_parser, apply_defaults, default_config
 
 # Import local dataset classes
 from datasets.brisbane_events import BrisbaneEventDataset, Brisbane_RGB_Dataset
@@ -46,8 +46,11 @@ def args_for_load_save(args_cli=None, reconstruct_method_name=None):
 
     # --- FIX: Set Default dataset_path if missing ---
     if not hasattr(args, 'dataset_path') or args.dataset_path is None:
-        # Auto-detect path based on type
-        args.dataset_path = f"./datasample_for_ensem_event_bench/{args.dataset_type}"
+        # Read from parser_config based on dataset_type
+        if args.dataset_type in default_config:
+            args.dataset_path = default_config[args.dataset_type]['dataset_path']
+        else:
+            raise ValueError(f"Unknown dataset_type: {args.dataset_type}")
     # ------------------------------------------------
 
     # Initialize dataset
@@ -82,9 +85,12 @@ def make_paths(args, sequence_name):
     """
     
     # --- 1. Base Path Safety ---
-    # Ensure we have a valid base path. If args.dataset_path is missing, default safely.
+    # Ensure we have a valid base path. If args.dataset_path is missing, default from parser_config.
     if not hasattr(args, 'dataset_path') or args.dataset_path is None:
-         args.dataset_path = f"./datasample_for_ensem_event_bench/{args.dataset_type}"
+        if args.dataset_type in default_config:
+            args.dataset_path = default_config[args.dataset_type]['dataset_path']
+        else:
+            raise ValueError(f"Unknown dataset_type: {args.dataset_type}")
     
     dataset_base = Path(args.dataset_path)
     recon_root = dataset_base / "image_reconstructions"

@@ -35,3 +35,8 @@ __pycache__/
 **/*.pyc# pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Large model files
+vpr_methods_evaluation/trained_models/**/*.ckpt
+vpr_methods_evaluation/trained_models/**/*.pth
+vpr_methods_evaluation/trained_models/**/*.pt
