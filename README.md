@@ -106,13 +106,19 @@ cd ensemble_event_vpr_bench/
 pixi install
 ```
 
-**3. Download Datsets**
-Note: download the [**NSAVP**](https://deepblue.lib.umich.edu/data/collections/v118rf157) and [**BrisbaneEvent**](https://huggingface.co/datasets/TobiasRobotics/brisbane-event-vpr/tree/main) datasets from their respective locations for the full experimental suite.
+## 3. Download Datasets
 
-To quickly test and verify this repository and its methods, a **sample dataset** is available on [Hugging Face](https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench/) which follows the expected folder structure. Modify the filepath in `parser_config.py` to point to the datasets to ensure all scripts can run. Use pixi to download the dataset via terminal. 
+> **Note:** Download the [**NSAVP**](https://deepblue.lib.umich.edu/data/collections/v118rf157) and [**Brisbane-Event-VPR**](https://huggingface.co/datasets/TobiasRobotics/brisbane-event-vpr/tree/main) datasets from their respective locations for the full experimental suite.
 
-Note: a folder with procesed GPS for the full brisbane event dataset is also added to hugging face for ease of processing. 
+| Dataset | Sensor (DVS) | FOV (H x V) | Resolution |
+| :--- | :--- | :--- | :--- |
+| **NSAVP** | Inivation DVXplorer | ~70° x 54° | 640 x 480 |
+| **Brisbane-Event-VPR** | Inivation DAVIS346 | ~71° x 56° | 346 x 260 |
 
+To quickly test and verify this repository and its methods, a **sample dataset** is available on [Hugging Face](https://huggingface.co/datasets/theresejoseph/datasample_for_ensem_event_bench/) which follows the expected folder structure. 
+
+1. Modify the filepath in `parser_config.py` to point to the datasets to ensure all scripts can run.
+2. Use `pixi` to download the dataset via terminal.
 ```bash
 pixi run download-sample-data 
 ```
