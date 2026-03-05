@@ -1,10 +1,12 @@
 # Ensemble-Based Event Camera Place Recognition Under Varying Illumination
 
-This repository contains the official codebase for the paper:
+This repository contains the official codebase for the paper: Ensemble-Based Event Camera Place Recognition Under Varying Illumination *Therese Joseph, Tobias Fischer, Michael Milford*
 
-**Ensemble-Based Event Camera Place Recognition Under Varying Illumination** *Therese Joseph, Tobias Fischer, Michael Milford*
+In this paper, we introduce an **ensemble-based approach** to event camera place recognition that combines sequence-matched results from multiple event-to-frame reconstructions, VPR feature extractors, and temporal resolutions. Our broader fusion strategy delivers significantly improved robustness under varied lighting conditions, achieving a **77% relative improvement in Recall@1** across day-night transitions.
 
-### NSAVP night
+---
+
+**NSAVP night**
 
 <table>
   <tr>
@@ -23,7 +25,7 @@ This repository contains the official codebase for the paper:
 
 ---
 
-### NSAVP afternoon
+**NSAVP afternoon**
 
 <table>
   <tr>
@@ -42,7 +44,7 @@ This repository contains the official codebase for the paper:
 
 ---
 
-### Brisbane daytime
+**Brisbane daytime**
 
 <table>
   <tr>
@@ -58,14 +60,6 @@ This repository contains the official codebase for the paper:
     <td><img src="./plots/gifs_cropped/daytime_e2vid_0.2_last10.gif" width="220"/></td>
   </tr>
 </table>
-
----
-
-### Abstract
-
-Compared to conventional cameras, event cameras provide a high dynamic range and low latency, offering greater robustness to rapid motion and challenging lighting conditions. Although the potential of event cameras for visual place recognition (VPR) has been established, developing robust VPR frameworks under severe illumination changes remains an open research problem.
-
-In this paper, we introduce an **ensemble-based approach** to event camera place recognition that combines sequence-matched results from multiple event-to-frame reconstructions, VPR feature extractors, and temporal resolutions. Our broader fusion strategy delivers significantly improved robustness under varied lighting conditions, achieving a **77% relative improvement in Recall@1** across day-night transitions.
 
 ---
 
@@ -106,7 +100,7 @@ cd ensemble_event_vpr_bench/
 pixi install
 ```
 
-## 3. Download Datasets
+**3. Download Datasets**
 
 > **Note:** Download the [**NSAVP**](https://deepblue.lib.umich.edu/data/collections/v118rf157) and [**Brisbane-Event-VPR**](https://huggingface.co/datasets/TobiasRobotics/brisbane-event-vpr/tree/main) datasets from their respective locations for the full experimental suite.
 
@@ -125,7 +119,7 @@ pixi run download-sample-data
 
 ## Workflow
 
-### 1. Data Reconstruction
+**1. Data Reconstruction**
 
 Convert raw event data into visual frames. You can specify different datasets (Brisbane or NSAVP), binning resolutions and reconstruction methods (eventCount, eventCount_noPolarity, itmeSurface, e2vid).
 
@@ -137,7 +131,7 @@ python load_and_save.py --dataset_type NSAVP --reconstruct_method_name e2vid --t
 The filename convention is the following:
 @{utm_east:.6f}@{utm_north:.6f}@{prefix}_{id}@.jpg
 
-### 2. Individual VPR Evaluation
+**2. Individual VPR Evaluation**
 
 Run a specific VPR method (e.g., MixVPR, NetVLAD, CosPlace) on the reconstructed frames with a specified seqeunce length (seq_len 1 is no sequence matching) for a reference query pair.
 
@@ -145,7 +139,7 @@ Run a specific VPR method (e.g., MixVPR, NetVLAD, CosPlace) on the reconstructed
 python testing.py --method mixvpr --dataset_type NSAVP --reconstruct_method_name e2vid --seq_len 10 --ref_seq_idx 9 --qry_seq_idx 10 --dataset_path ./datasample_for_ensem_event_bench/NSAVP/
 ```
 
-**Sequence Reference IDs:**
+Sequence Reference IDs:
 
 Use the following IDs for `--ref_seq_idx` and `--qry_seq_idx`:
 
@@ -166,7 +160,7 @@ Use the following IDs for `--ref_seq_idx` and `--qry_seq_idx`:
 
 ---
 
-### 3. Ensemble Evaluation (Main Contribution)
+**3. Ensemble Evaluation (Main Contribution)**
 
 Combine results from multiple reconstruction methods, VPR feature extractors, and temporal resolutions to achieve robust place recognition under varying illumination.
 
@@ -174,7 +168,7 @@ Combine results from multiple reconstruction methods, VPR feature extractors, an
 python ablate_ensembles.py --dataset_name NSAVP --ref_seq R0_RA0 --qry_seq R0_RN0 --ensemble_over "recon,time" --vpr_methods "mixvpr" --recon_methods "eventCount,timeSurface" --time_strs "0.1,1.0" --seq_len 10 --auto_generate
 ```
 
-**Parameters:**
+Parameters:
 - `--ensemble_over`: What to ensemble over (combinations: `recon`, `vpr`, `time`, or any combination)
 - `--vpr_methods`: Comma-separated VPR methods (e.g., `mixvpr,cosplace,netvlad`)
 - `--recon_methods`: Comma-separated reconstruction methods
@@ -183,7 +177,7 @@ python ablate_ensembles.py --dataset_name NSAVP --ref_seq R0_RA0 --qry_seq R0_RN
 - `--auto_generate`: (Optional) Automatically run `testing.py` to generate missing similarity matrices
 - `--dataset_path`: (Optional) Override dataset path from config
 
-**Auto-generation of Missing Files:**
+Auto-generation of Missing Files:
 
 If similarity matrices (`.npy` files) don't exist for the requested configurations, the script will detect them and either:
 - Exit with a list of missing files (default behavior)
@@ -193,7 +187,7 @@ This saves time by eliminating the need to manually run individual VPR evaluatio
 
 ---
 
-### 4. Result Analysis & Visualization (`evaluate.ipynb`)
+**4. Result Analysis & Visualization (`evaluate.ipynb`)**
 
 The `evaluate.ipynb` notebook is used to process the CSV outputs generated by the scripts above.
 
@@ -203,7 +197,7 @@ The `evaluate.ipynb` notebook is used to process the CSV outputs generated by th
 
 ---
 
-### Configuration
+## Configuration
 
 The `parser_config.py` file contains default configurations for each dataset. Key parameters include:
 
