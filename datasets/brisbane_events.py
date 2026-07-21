@@ -10,6 +10,84 @@ from datasets.base_dataset import BaseDataset
 from utils.odometry_utils import adaptive_bin_size, plot_vels_accs_bins
 
 
+# --- E-LiteVPR: read our flat <key>.parquet + <key>.nmea layout directly ---
+# (reuses the proven readers from scripts/evaluate_brisbane.py so nothing is
+#  re-derived; the bench's own video_beginning anchors handle the alignment).
+
+# sequence name -> Brisbane recording key (matches configs/datasets/brisbane.yaml)
+SEQ_TO_KEY = {
+    'sunset1': '2020-04-21-17-03-03', 'sunset2': '2020-04-22-17-24-21',
+    'daytime': '2020-04-24-15-12-03', 'morning': '2020-04-28-09-14-11',
+    'sunrise': '2020-04-29-06-20-23', 'night':   '2020-04-27-18-13-29',
+}
+SEQ_TO_KEY.update({f'{k}_training': v for k, v in list(SEQ_TO_KEY.items())})
+
+
+def _find_key_file(root, key, suffix):
+    from pathlib import Path
+    hits = sorted(f for f in Path(root).rglob(f'*{suffix}') if key in f.name)
+    if not hits:
+        raise FileNotFoundError(f"no *{suffix} containing '{key}' under {root}")
+    return str(hits[0])
+
+
+def _resolve_cols(pf):
+    names = {n.lower(): n for n in pf.schema_arrow.names}
+    def pick(*cands):
+        for c in cands:
+            if c in names:
+                return names[c]
+        raise KeyError(f"none of {cands} in {pf.schema_arrow.names}")
+    return pick("x"), pick("y"), pick("t", "timestamp", "time"), pick("p", "pol", "polarity")
+
+
+def _time_scale(t_last):
+    if t_last > 1e17:
+        return 1e-9
+    if t_last > 1e14:
+        return 1e-6
+    if t_last > 1e11:
+        return 1e-3
+    return 1.0
+
+
+def parse_nmea_rmc(path):
+    """$__RMC -> (t_epoch[s], lat, lon); verbatim from evaluate_brisbane.py."""
+    from datetime import datetime, timezone
+    times, lats, lons = [], [], []
+    with open(path, "r", errors="ignore") as f:
+        for line in f:
+            if "RMC" not in line:
+                continue
+            fields = line.strip().split(",")
+            try:
+                if len(fields) < 10 or fields[2] != "A":
+                    continue
+                hhmmss, lat_raw, ns, lon_raw, ew, date = (
+                    fields[1], fields[3], fields[4], fields[5],
+                    fields[6], fields[9])
+                lat = int(lat_raw[:2]) + float(lat_raw[2:]) / 60.0
+                lon = int(lon_raw[:3]) + float(lon_raw[3:]) / 60.0
+                if ns == "S":
+                    lat = -lat
+                if ew == "W":
+                    lon = -lon
+                base = datetime.strptime(
+                    date + hhmmss.split(".")[0], "%d%m%y%H%M%S"
+                ).replace(tzinfo=timezone.utc).timestamp()
+                frac = float("0." + hhmmss.split(".")[1]) if "." in hhmmss else 0.0
+                times.append(base + frac)
+                lats.append(lat)
+                lons.append(lon)
+            except (ValueError, IndexError):
+                continue
+    if not times:
+        raise RuntimeError(f"No valid RMC fixes parsed from {path}")
+    order = np.argsort(times)
+    return (np.asarray(times)[order], np.asarray(lats)[order],
+            np.asarray(lons)[order])
+
+
 def convert_latlon_to_utm(positions):
     """
     Convert a list of (lat, lon) pairs in WGS84 to UTM (easting, northing) in meters,
@@ -150,48 +228,46 @@ class BrisbaneEventDataset(BaseDataset):
 
 
     def load_events(self, sequence_name):
+        # E-LiteVPR flat layout: <root>/**/<key>.parquet, columns via aliases.
+        # Timestamps are absolute event-clock epoch seconds (same clock as
+        # video_beginning), consumed directly by process_sequence's slicing.
         import pyarrow as pa
         import pyarrow.parquet as pq
-        # Open Parquet file via PyArrow
-        events_path = os.path.join(self.base_path, 'paraquet_data', sequence_name, "events.parquet")
+        key = SEQ_TO_KEY[sequence_name]
+        events_path = _find_key_file(self.base_path, key, ".parquet")
         parquet_file = pq.ParquetFile(events_path)
+        cx, cy, ct, cp = _resolve_cols(parquet_file)
+        n_rg = parquet_file.metadata.num_row_groups
+        t_last = float(parquet_file.read_row_group(n_rg - 1, columns=[ct]).column(0)[-1].as_py())
+        scale = _time_scale(t_last)
 
-        # Collect batches
         t_list, x_list, y_list, p_list = [], [], [], []
-        tqdm_stream = sys.stdout  # or sys.stderr if preferred
-        for batch in tqdm(parquet_file.iter_batches(columns=['t', 'x', 'y', 'p'], batch_size=10_000_000), file=tqdm_stream, dynamic_ncols=True):
-        # for batch in tqdm(,  desc="Loading paraquet"):
-            table = pa.Table.from_batches([batch])
-            df = table.to_pandas()
-            t = df['t'].to_numpy()
-            x = df['x'].to_numpy()
-            y = df['y'].to_numpy()
-            p = df['p'].fillna(0).astype(int).to_numpy()  # fill NaNs and convert safely
-            
-            t_list.append(t)
-            x_list.append(x)
-            y_list.append(y)
-            p_list.append(p)
-            
+        for batch in tqdm(parquet_file.iter_batches(columns=[cx, cy, ct, cp],
+                                                    batch_size=10_000_000),
+                          file=sys.stdout, dynamic_ncols=True):
+            x_list.append(batch.column(0).to_numpy(zero_copy_only=False))
+            y_list.append(batch.column(1).to_numpy(zero_copy_only=False))
+            t_list.append(batch.column(2).to_numpy(zero_copy_only=False).astype(np.float64) * scale)
+            p_raw = batch.column(3).to_numpy(zero_copy_only=False)
+            p_list.append(np.where(np.nan_to_num(p_raw) > 0, 1, 0))
 
-        # Concatenate all chunks
-        t_all = np.concatenate(t_list)
-        x_all = np.concatenate(x_list)
-        y_all = np.concatenate(y_list)
-        p_all = np.concatenate(p_list)
-
-        # Create structured record array
         ev_dtype = np.dtype([('t', np.float64), ('x', int), ('y', int), ('p', int)])
-        events = np.core.records.fromarrays([t_all, x_all, y_all, p_all], dtype=ev_dtype)
+        events = np.core.records.fromarrays(
+            [np.concatenate(t_list), np.concatenate(x_list),
+             np.concatenate(y_list), np.concatenate(p_list)], dtype=ev_dtype)
         return events
 
 
     def load_gps(self, sequence_name, args):
-        gps_path = os.path.join(self.base_path, 'paraquet_data',  sequence_name, f"{sequence_name}_gps.txt")
-        gps = np.loadtxt(gps_path)
-        lat_lon = np.array(gps[:, :2])
-        timestamps = gps[:, 2]
-        return lat_lon, timestamps  # positions, timestamps
+        # Parse the NMEA directly; return GPS time RELATIVE to the first fix so
+        # that process_sequence's `+= video_beginning[seq]` yields the correct
+        # absolute event-clock time (this reproduces our calibrated alignment,
+        # e.g. night 6.90s = first_RMC - video_beginning).
+        key = SEQ_TO_KEY[sequence_name]
+        nmea_path = _find_key_file(self.base_path, key, ".nmea")
+        gps_t, lat, lon = parse_nmea_rmc(nmea_path)
+        lat_lon = np.stack([lat, lon], axis=1)
+        return lat_lon, gps_t - gps_t[0]
 
 
     def get_slice_indices(self, ev_ts: np.ndarray, gps_ts: np.ndarray, time_res: float, num_slices: int):
