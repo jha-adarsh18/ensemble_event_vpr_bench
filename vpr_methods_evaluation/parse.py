@@ -194,6 +194,13 @@ def parse_arguments(method=None):
         if args.descriptors_dimension not in [None, 128, 512, 4096]:
             raise ValueError("When using Conv-AP the descriptors_dimension must be one of [None, 128, 512, 4096]")
 
+    elif args.method == "elitevpr":
+        # single ViT-S student; GeM global descriptor == teacher_dim
+        if args.descriptors_dimension is None:
+            args.descriptors_dimension = 1024
+        if args.image_size is None:
+            args.image_size = [384, 384]
+
     elif args.method == "eigenplaces":
         if args.backbone is None:
             args.backbone = "ResNet50"

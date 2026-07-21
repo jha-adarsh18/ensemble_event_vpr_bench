@@ -189,7 +189,10 @@ def load_save_data(dataset, reconstructor, args, ref_or_qry, return_data=True):
         # Save Loop
         for i, (frame, pos) in enumerate(zip(frames, gt_positions)):
             # Filename format: @utm_e@utm_n@frame_i@.jpg
-            filename = f"@{pos[0]:.6f}@{pos[1]:.6f}@frame_{i}@.jpg"
+            # E-LiteVPR's histogram encodes a signed net channel; store it
+            # losslessly as PNG so JPEG artifacts don't corrupt it.
+            ext = "png" if getattr(args, "reconstruct_method_name", "") == "eliteHistogram" else "jpg"
+            filename = f"@{pos[0]:.6f}@{pos[1]:.6f}@frame_{i}@.{ext}"
             filepath = sequence_dir / filename
             
             # Normalize and convert for saving
