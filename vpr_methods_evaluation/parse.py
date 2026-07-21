@@ -15,6 +15,7 @@ def parse_arguments(method=None):
         type=str,
         default="megaloc",
         choices=[
+            "elitevpr",
             "netvlad",
             "apgem",
             "sfrs",
