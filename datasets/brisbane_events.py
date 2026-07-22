@@ -499,7 +499,10 @@ class BrisbaneEventDataset(BaseDataset):
         start_idxs = start_idxs[valid_mask]
         end_idxs = end_idxs[valid_mask]
 
-
+        print("DEBUG valid:", int(valid_mask.sum()), "of", len(bin_starts),
+              "| bin_starts:", float(bin_starts[0]), float(bin_starts[-1]),
+              "| t_events:", float(t_events[0]), float(t_events[-1]),
+              "| min_time_res:", args.min_time_res, "time_res:", args.time_res)
         # --- Reconstruct event frames ---
         array_3d, _ = reconstructor.reconstruct(
             eventsData=events,
