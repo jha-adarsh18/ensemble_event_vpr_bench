@@ -36,12 +36,16 @@ class EventReconstructor(BaseReconstructor):
         pass
 
     def reconstruct(self, eventsData, sensor_size, start_indices, end_indices,
-                    hp_loc=None):
+                    hp_loc=None, hot_mask=None):
         """
         Args:
             eventsData: structured array with fields 'x', 'y', 'p' (p in {0,1}).
             sensor_size: (width, height).
             start_indices/end_indices: per-frame event window bounds.
+            hot_mask: optional precomputed per-traverse hot-pixel mask. Supplied
+                by the streaming NSAVP loader (which computes it over the full
+                traverse in a chunked pre-pass); when None it is computed here
+                over eventsData, as in the standard full-load path.
         Returns:
             frames: (num_frames, 384, 384, 3) uint8 RGB.
             frame_times: list of (start_idx, end_idx).
@@ -50,10 +54,11 @@ class EventReconstructor(BaseReconstructor):
         sensor_hw = (height, width)
 
         # Hot-pixel mask over the whole traverse (as in the E-LiteVPR pipeline)
-        x_all = eventsData['x'].astype(np.int64)
-        y_all = eventsData['y'].astype(np.int64)
-        hot_mask = compute_hot_pixel_mask(x_all, y_all, sensor_hw,
-                                          threshold=99.5)
+        if hot_mask is None:
+            x_all = eventsData['x'].astype(np.int64)
+            y_all = eventsData['y'].astype(np.int64)
+            hot_mask = compute_hot_pixel_mask(x_all, y_all, sensor_hw,
+                                              threshold=99.5)
 
         frames = np.zeros((len(start_indices), OUT_SIZE[1], OUT_SIZE[0], 3),
                           dtype=np.uint8)

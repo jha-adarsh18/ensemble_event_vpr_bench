@@ -10,6 +10,83 @@ import numpy as np
 import os
 
 
+def _chunked_searchsorted(t_dset, targets_sec, side, chunk=100_000_000):
+    """np.searchsorted(timestamps*1e-9, targets_sec, side) without loading the
+    whole (billions-long) timestamp array. Reads the sorted h5 dataset in
+    chunks; exactly reproduces the full-array result (same float64 sec scaling
+    as load_events). targets_sec must be sorted ascending."""
+    targets = np.asarray(targets_sec)
+    N = int(t_dset.shape[0])
+    idxs = np.full(len(targets), N, dtype=np.int64)
+    ti = 0
+    for s in range(0, N, chunk):
+        if ti >= len(targets):
+            break
+        e = min(s + chunk, N)
+        block = t_dset[s:e].astype(np.float64) * 1e-9      # seconds
+        last = block[-1]
+        while ti < len(targets) and targets[ti] <= last:
+            idxs[ti] = s + int(np.searchsorted(block, targets[ti], side=side))
+            ti += 1
+    return idxs
+
+
+def _hot_mask_full(events_path, sensor_size, chunk=100_000_000, threshold=99.5):
+    """Per-traverse hot-pixel mask over ALL events, accumulated in chunks.
+    Bit-identical to compute_hot_pixel_mask on the full event stream (bincount
+    is associative, so chunked sum == full sum)."""
+    width, height = int(sensor_size[0]), int(sensor_size[1])
+    hist = np.zeros(height * width, dtype=np.float64)
+    with h5py.File(events_path, "r") as f:
+        xe = f["events/x_coordinates"]
+        ye = f["events/y_coordinates"]
+        N = int(xe.shape[0])
+        for s in range(0, N, chunk):
+            e = min(s + chunk, N)
+            x = xe[s:e].astype(np.int64)
+            y = ye[s:e].astype(np.int64)
+            hist += np.bincount(y * width + x, minlength=height * width)
+    hist = hist.reshape(height, width)
+    nz = hist[hist > 0]
+    if nz.size == 0:
+        return np.zeros((height, width), dtype=bool)
+    return hist > np.percentile(nz, threshold)
+
+
+def _stream_reconstruct(events_path, sensor_size, start_idxs, end_idxs,
+                        reconstructor, chunk_bins=30):
+    """Reconstruct bins in chunks, reading only each chunk's events from the h5
+    file, so the full traverse never enters RAM. For eliteHistogram the
+    per-traverse hot mask is precomputed (chunked) and passed in, so the output
+    is bit-identical to the full-load path; other reconstructors are unaffected."""
+    is_elite = "eliteHistogram" in type(reconstructor).__module__
+    hot_mask = _hot_mask_full(events_path, sensor_size) if is_elite else None
+    frames = []
+    nb = len(start_idxs)
+    with h5py.File(events_path, "r") as f:
+        te = f["events/timestamps"]
+        xe = f["events/x_coordinates"]
+        ye = f["events/y_coordinates"]
+        pe = f["events/polarities"]
+        for b0 in range(0, nb, chunk_bins):
+            b1 = min(b0 + chunk_bins, nb)
+            e0 = int(start_idxs[b0])
+            e1 = int(end_idxs[b1 - 1])
+            if e1 <= e0:
+                continue
+            ev = np.core.records.fromarrays(
+                [te[e0:e1].astype(np.float64) * 1e-9, xe[e0:e1], ye[e0:e1], pe[e0:e1]],
+                names='t,x,y,p')
+            ls = (np.asarray(start_idxs[b0:b1]) - e0).astype(np.int64)
+            le = (np.asarray(end_idxs[b0:b1]) - e0).astype(np.int64)
+            kw = {"hot_mask": hot_mask} if is_elite else {}
+            fr, _ = reconstructor.reconstruct(
+                eventsData=ev, sensor_size=sensor_size,
+                start_indices=ls, end_indices=le, **kw)
+            frames.extend(list(fr))
+    return np.array(frames)
+
+
 class NSVAPDataset(BaseDataset):
     def __init__(self, base_path, sensor_size=(640, 480, 2), data_fraction=1):
         self.base_path = base_path
@@ -141,26 +218,21 @@ class NSVAPDataset(BaseDataset):
         plt.close()
 
                 
-        # --- Reconstruct ---
-        events = self.load_events(sequence_name)
-        t_events = events['t']
-
+        # --- Reconstruct (streaming: the full event stream is billions of
+        #     events and does not fit in RAM, so bins are indexed and
+        #     reconstructed in chunks directly from the h5 file) ---
         if args.count_bin != 1:
-            start_idxs = np.searchsorted(t_events, bin_starts, side='left')
-            end_idxs = np.searchsorted(t_events, bin_ends, side='right')
+            with h5py.File(events_path, "r") as f:
+                tds = f["events/timestamps"]
+                start_idxs = _chunked_searchsorted(tds, bin_starts, "left")
+                end_idxs = _chunked_searchsorted(tds, bin_ends, "right")
         else:
             start_idxs = start_idxs[valid_bin_mask]
             end_idxs = end_idxs[valid_bin_mask]
         print(f"Reconstructing {len(start_idxs)} bins for sequence {sequence_name}", flush=True)
 
-        frames, _ = reconstructor.reconstruct(
-            eventsData=events,
-            sensor_size=self.sensor_size,
-            start_indices=start_idxs,
-            end_indices=end_idxs)
-        
-
-
+        frames = _stream_reconstruct(events_path, self.sensor_size,
+                                     start_idxs, end_idxs, reconstructor)
         return np.array(frames), gt_positions
     
     def process_sequence_by_name(self, args, sequence_name, reconstructor):
