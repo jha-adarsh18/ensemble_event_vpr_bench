@@ -187,7 +187,10 @@ class BrisbaneEventDataset(BaseDataset):
 
 
     def load_gps(self, sequence_name, args):
-        gps_path = os.path.join(self.base_path, 'paraquet_data',  sequence_name, f"{sequence_name}_gps.txt")
+        # Use the dense processed GPS: the per-sequence <seq>/<seq>_gps.txt is
+        # a downsample (breaks find_first_self_loop on night -> (None,None));
+        # gps_processed/<seq>_gps.txt is the full-resolution track.
+        gps_path = os.path.join(self.base_path, 'paraquet_data', 'gps_processed', f"{sequence_name}_gps.txt")
         gps = np.loadtxt(gps_path)
         lat_lon = np.array(gps[:, :2])
         timestamps = gps[:, 2]
