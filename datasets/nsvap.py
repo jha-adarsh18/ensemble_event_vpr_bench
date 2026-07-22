@@ -54,11 +54,14 @@ def _hot_mask_full(events_path, sensor_size, chunk=100_000_000, threshold=99.5):
 
 
 def _stream_reconstruct(events_path, sensor_size, start_idxs, end_idxs,
-                        reconstructor, chunk_bins=30):
+                        reconstructor, max_events=500_000_000):
     """Reconstruct bins in chunks, reading only each chunk's events from the h5
-    file, so the full traverse never enters RAM. For eliteHistogram the
-    per-traverse hot mask is precomputed (chunked) and passed in, so the output
-    is bit-identical to the full-load path; other reconstructors are unaffected."""
+    file, so the full traverse never enters RAM. Chunks are grown by EVENT
+    COUNT (up to `max_events`, ~11 GB at 500M) rather than a fixed bin count,
+    so memory stays bounded regardless of per-bin density and chunks stay large
+    (few E2VID state resets). For eliteHistogram the per-traverse hot mask is
+    precomputed and passed in, so output is bit-identical to the full-load
+    path; grouping of bins into chunks never changes per-bin output."""
     is_elite = "eliteHistogram" in type(reconstructor).__module__
     hot_mask = _hot_mask_full(events_path, sensor_size) if is_elite else None
     frames = []
@@ -68,22 +71,25 @@ def _stream_reconstruct(events_path, sensor_size, start_idxs, end_idxs,
         xe = f["events/x_coordinates"]
         ye = f["events/y_coordinates"]
         pe = f["events/polarities"]
-        for b0 in range(0, nb, chunk_bins):
-            b1 = min(b0 + chunk_bins, nb)
+        b0 = 0
+        while b0 < nb:
+            b1 = b0 + 1                                   # at least one bin
+            while b1 < nb and (int(end_idxs[b1]) - int(start_idxs[b0])) <= max_events:
+                b1 += 1
             e0 = int(start_idxs[b0])
             e1 = int(end_idxs[b1 - 1])
-            if e1 <= e0:
-                continue
-            ev = np.core.records.fromarrays(
-                [te[e0:e1].astype(np.float64) * 1e-9, xe[e0:e1], ye[e0:e1], pe[e0:e1]],
-                names='t,x,y,p')
-            ls = (np.asarray(start_idxs[b0:b1]) - e0).astype(np.int64)
-            le = (np.asarray(end_idxs[b0:b1]) - e0).astype(np.int64)
-            kw = {"hot_mask": hot_mask} if is_elite else {}
-            fr, _ = reconstructor.reconstruct(
-                eventsData=ev, sensor_size=sensor_size,
-                start_indices=ls, end_indices=le, **kw)
-            frames.extend(list(fr))
+            if e1 > e0:
+                ev = np.core.records.fromarrays(
+                    [te[e0:e1].astype(np.float64) * 1e-9, xe[e0:e1], ye[e0:e1], pe[e0:e1]],
+                    names='t,x,y,p')
+                ls = (np.asarray(start_idxs[b0:b1]) - e0).astype(np.int64)
+                le = (np.asarray(end_idxs[b0:b1]) - e0).astype(np.int64)
+                kw = {"hot_mask": hot_mask} if is_elite else {}
+                fr, _ = reconstructor.reconstruct(
+                    eventsData=ev, sensor_size=sensor_size,
+                    start_indices=ls, end_indices=le, **kw)
+                frames.extend(list(fr))
+            b0 = b1
     return np.array(frames)
 
 
