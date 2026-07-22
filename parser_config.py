@@ -51,7 +51,7 @@ default_config = {
         'min_time_res': 0.01,
         'max_bins': 50, 
         'adaptive_bin': 0,
-        'dataset_path': "/work/qvpr/data/processed/BrisbaneEvent-ensemble_bench",
+        'dataset_path': "/workspace/E-LiteVPR/external/ensemble_event_vpr_bench/datasample_for_ensem_event_bench/Brisbane",
         'start_idx': 0,
         'end_idx': None,
         'dist_thresh': 10,
