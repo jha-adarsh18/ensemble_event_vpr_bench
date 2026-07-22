@@ -376,6 +376,11 @@ def general_ensemble(
     else:
         dataset_name = 'Brisbane'
 
+    # Where the reconstruction frames + labels actually live. testing.py writes
+    # them under the dataset_path from parser_config; only fall back to the
+    # bundled datasample layout when no explicit path was given (e.g. Brisbane).
+    recon_root = dataset_path if dataset_path else f'datasample_for_ensem_event_bench/{dataset_name}'
+
     print(f"Ensembling for {dataset_name} ({ref_name} vs {qry_name}), ensemble_over={ensemble_over}, seqLen={seqLen}")
     suffix = '2_2' if ensemble_over == 'patch' else '1_1'
     mode = 'patch' if ensemble_over == 'patch' else 'frame'
@@ -414,7 +419,7 @@ def general_ensemble(
                         missing_files.append((vpr_method, recon_method, time_str))
                         continue
 
-                    work_dir = f'datasample_for_ensem_event_bench/{dataset_name}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
+                    work_dir = f'{recon_root}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
                     queries_folder = f"{work_dir}/{qry_name}"
                     database_folder = f"{work_dir}/{ref_name}"
                     test_ds = TestDataset(
@@ -447,7 +452,7 @@ def general_ensemble(
                         missing_files.append((vpr_method, recon_method, time_str))
                         continue
 
-                    work_dir = f'datasample_for_ensem_event_bench/{dataset_name}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
+                    work_dir = f'{recon_root}/image_reconstructions/fixed_timebins_{time_res}/{recon_method}'
                     queries_folder = f"{work_dir}/{qry_name}"
                     database_folder = f"{work_dir}/{ref_name}"
                     test_ds = TestDataset(
