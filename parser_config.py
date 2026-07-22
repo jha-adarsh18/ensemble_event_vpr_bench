@@ -12,7 +12,7 @@ default_config = {
         'time_res': 0.1,
         'min_time_res': 0.01,
         'adaptive_bin': 0,
-        'dataset_path': "./datasample_for_ensem_event_bench/NSAVP",
+        'dataset_path': "/workspace/E-LiteVPR/datasets/nsavp",
         'start_idx': 0,
         'end_idx': None,
         'dist_thresh': 10,
