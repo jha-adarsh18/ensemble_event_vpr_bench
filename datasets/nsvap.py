@@ -10,25 +10,35 @@ import numpy as np
 import os
 
 
-def _chunked_searchsorted(t_dset, targets_sec, side, chunk=100_000_000):
-    """np.searchsorted(timestamps*1e-9, targets_sec, side) without loading the
-    whole (billions-long) timestamp array. Reads the sorted h5 dataset in
-    chunks; exactly reproduces the full-array result (same float64 sec scaling
-    as load_events). targets_sec must be sorted ascending."""
-    targets = np.asarray(targets_sec)
+def _chunked_bin_indices(t_dset, bin_starts, bin_ends):
+    """Per-bin (start_idx, end_idx) event indices via BINARY SEARCH on the
+    sorted h5 timestamps. Reads only ~O(bins*logN) individual elements instead
+    of scanning the full (billions-long) dataset, so it is fast without loading
+    events into RAM. Byte-identical to
+    searchsorted(timestamps*1e-9, bin_starts,'left') / (bin_ends,'right')
+    -- same float64-second comparison. bin_starts/ends must be sorted."""
     N = int(t_dset.shape[0])
-    idxs = np.full(len(targets), N, dtype=np.int64)
-    ti = 0
-    for s in range(0, N, chunk):
-        if ti >= len(targets):
-            break
-        e = min(s + chunk, N)
-        block = t_dset[s:e].astype(np.float64) * 1e-9      # seconds
-        last = block[-1]
-        while ti < len(targets) and targets[ti] <= last:
-            idxs[ti] = s + int(np.searchsorted(block, targets[ti], side=side))
-            ti += 1
-    return idxs
+
+    def bisect(target, lo, side):
+        hi = N
+        while lo < hi:
+            mid = (lo + hi) // 2
+            v = float(t_dset[mid]) * 1e-9
+            go_right = (v < target) if side == "left" else (v <= target)
+            if go_right:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo
+
+    si = np.empty(len(bin_starts), dtype=np.int64)
+    ei = np.empty(len(bin_ends), dtype=np.int64)
+    lo = 0
+    for i in range(len(bin_starts)):
+        si[i] = bisect(float(bin_starts[i]), lo, "left")     # advance lo: bins sorted
+        ei[i] = bisect(float(bin_ends[i]), int(si[i]), "right")
+        lo = int(si[i])
+    return si, ei
 
 
 def _hot_mask_full(events_path, sensor_size, chunk=100_000_000, threshold=99.5):
@@ -229,9 +239,8 @@ class NSVAPDataset(BaseDataset):
         #     reconstructed in chunks directly from the h5 file) ---
         if args.count_bin != 1:
             with h5py.File(events_path, "r") as f:
-                tds = f["events/timestamps"]
-                start_idxs = _chunked_searchsorted(tds, bin_starts, "left")
-                end_idxs = _chunked_searchsorted(tds, bin_ends, "right")
+                start_idxs, end_idxs = _chunked_bin_indices(
+                    f["events/timestamps"], bin_starts, bin_ends)
         else:
             start_idxs = start_idxs[valid_bin_mask]
             end_idxs = end_idxs[valid_bin_mask]
