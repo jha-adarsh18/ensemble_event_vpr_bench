@@ -27,8 +27,11 @@ if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 from model import EventViTStudent
 
-DEFAULT_WEIGHTS = os.path.join(_BENCH, "elitevpr_weights",
-                               "merged_alpha0.5.pth")
+# Weight file: env-var override lets us ablate checkpoints (phase1 / phase2 /
+# merged_alpha*) without touching code. Falls back to the bundled alpha0.5.
+DEFAULT_WEIGHTS = os.environ.get(
+    "ELITEVPR_WEIGHTS",
+    os.path.join(_BENCH, "elitevpr_weights", "merged_alpha0.5.pth"))
 
 _MEAN = [0.485, 0.456, 0.406]
 _STD = [0.229, 0.224, 0.225]
@@ -40,7 +43,10 @@ class ElitevprModel(nn.Module):
         self.student = EventViTStudent(
             teacher_dim=1024, num_patches=576,
             img_size=tuple(img_size), in_channels=3)
+        print(f"[elitevpr] loading weights: {weights_path}", flush=True)
         state = torch.load(weights_path, map_location="cpu")
+        if isinstance(state, dict) and "model_state_dict" in state:
+            state = state["model_state_dict"]
         self.student.load_state_dict(state)
         self.student.eval()
         self.img_size = tuple(img_size)
