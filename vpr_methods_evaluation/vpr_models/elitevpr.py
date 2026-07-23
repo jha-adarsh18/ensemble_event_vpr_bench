@@ -45,8 +45,20 @@ class ElitevprModel(nn.Module):
             img_size=tuple(img_size), in_channels=3)
         print(f"[elitevpr] loading weights: {weights_path}", flush=True)
         state = torch.load(weights_path, map_location="cpu")
-        if isinstance(state, dict) and "model_state_dict" in state:
-            state = state["model_state_dict"]
+        # unwrap training checkpoints saved as {"model_state[_dict]": ...}
+        if isinstance(state, dict):
+            for k in ("model_state_dict", "model_state", "state_dict"):
+                if k in state:
+                    state = state[k]
+                    break
+        # Phase-2 saves a Phase2Net: the student under a "student." prefix plus
+        # a metric head. We deploy the backbone GeM descriptor (Phase 2 was
+        # selected with use_head=False), so keep the stripped student.* weights
+        # and drop head.*. Phase-1 / merged_alpha* are bare student state dicts
+        # (no prefix), so they pass through unchanged.
+        if any(k.startswith("student.") for k in state):
+            state = {k[len("student."):]: v for k, v in state.items()
+                     if k.startswith("student.")}
         self.student.load_state_dict(state)
         self.student.eval()
         self.img_size = tuple(img_size)
