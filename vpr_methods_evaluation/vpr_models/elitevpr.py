@@ -31,7 +31,7 @@ from model import EventViTStudent
 # merged_alpha*) without touching code. Falls back to the bundled alpha0.5.
 DEFAULT_WEIGHTS = os.environ.get(
     "ELITEVPR_WEIGHTS",
-    os.path.join(_BENCH, "elitevpr_weights", "merged_alpha0.5.pth"))
+    os.path.join(_BENCH, "elitevpr_weights", "best_phase1_histogram.pth"))
 
 _MEAN = [0.485, 0.456, 0.406]
 _STD = [0.229, 0.224, 0.225]
