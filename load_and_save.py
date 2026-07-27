@@ -93,7 +93,7 @@ def make_paths(args, sequence_name):
             raise ValueError(f"Unknown dataset_type: {args.dataset_type}")
     
     dataset_base = Path(args.dataset_path)
-    recon_root = os.getcwd() / "image_reconstructions"
+    recon_root = os.path.join(os.getcwd(), "image_reconstructions")
     
     # --- 2. Advanced Binning Logic (From New Method) ---
     if args.count_bin == 1 and not getattr(args, 'adaptive_bin', 0):
