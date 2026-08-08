@@ -40,9 +40,6 @@ _STD = [0.229, 0.224, 0.225]
 class ElitevprModel(nn.Module):
     def __init__(self, weights_path=DEFAULT_WEIGHTS, img_size=(384, 384)):
         super().__init__()
-        self.student = EventViTStudent(
-            teacher_dim=1024, num_patches=576,
-            img_size=tuple(img_size), in_channels=3)
         print(f"[elitevpr] loading weights: {weights_path}", flush=True)
         state = torch.load(weights_path, map_location="cpu")
         # unwrap training checkpoints saved as {"model_state[_dict]": ...}
@@ -59,6 +56,21 @@ class ElitevprModel(nn.Module):
         if any(k.startswith("student.") for k in state):
             state = {k[len("student."):]: v for k, v in state.items()
                      if k.startswith("student.")}
+        # `model.pooling` decides the state-dict key (scripts/model.py:118-129):
+        # clamp -> gem.p, signed -> pool.p, mean -> no pooling key at all. Read
+        # the family off the checkpoint; assuming clamp makes a signed
+        # checkpoint fail the strict load below.
+        if any(k.startswith("gem.") for k in state):
+            pooling = "clamp"
+        elif any(k.startswith("pool.") for k in state):
+            pooling = "signed"
+        else:
+            pooling = "mean"
+        print(f"[elitevpr] pooling inferred from checkpoint: {pooling}",
+              flush=True)
+        self.student = EventViTStudent(
+            teacher_dim=1024, num_patches=576,
+            img_size=tuple(img_size), in_channels=3, pooling=pooling)
         self.student.load_state_dict(state)
         self.student.eval()
         self.img_size = tuple(img_size)
