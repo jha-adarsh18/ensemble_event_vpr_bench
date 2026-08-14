@@ -1,4 +1,5 @@
 import argparse
+import os
 
 
 def parse_arguments(method=None):
@@ -17,6 +18,7 @@ def parse_arguments(method=None):
         choices=[
             "elitevpr",
             "elitevpr_salad",
+            "elitevpr_nolinear",
             "netvlad",
             "apgem",
             "sfrs",
@@ -200,6 +202,15 @@ def parse_arguments(method=None):
         # single ViT-S student; GeM global descriptor == teacher_dim
         if args.descriptors_dimension is None:
             args.descriptors_dimension = 1024
+        if args.image_size is None:
+            args.image_size = [384, 384]
+
+    elif args.method == "elitevpr_nolinear":
+        # no patch projection: the descriptor is the BACKBONE width (ViT-S 384),
+        # not teacher_dim. ELITEVPR_NOLINEAR_DIM overrides for other backbones.
+        if args.descriptors_dimension is None:
+            args.descriptors_dimension = int(
+                os.environ.get("ELITEVPR_NOLINEAR_DIM", 384))
         if args.image_size is None:
             args.image_size = [384, 384]
 
