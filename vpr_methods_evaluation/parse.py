@@ -16,6 +16,7 @@ def parse_arguments(method=None):
         default="megaloc",
         choices=[
             "elitevpr",
+            "elitevpr_salad",
             "netvlad",
             "apgem",
             "sfrs",
@@ -199,6 +200,16 @@ def parse_arguments(method=None):
         # single ViT-S student; GeM global descriptor == teacher_dim
         if args.descriptors_dimension is None:
             args.descriptors_dimension = 1024
+        if args.image_size is None:
+            args.image_size = [384, 384]
+
+    elif args.method == "elitevpr_salad":
+        # same student, SALAD aggregation. dim = clusters*cluster_dim + token_dim
+        # and MUST match the SALAD_* env vars the checkpoint was trained with:
+        #   64*16 + 256 = 1280 (ckpt_salad1280_*, SALAD_CLUSTER_DIM=16)
+        #   64*128 + 256 = 8448 (defaults)
+        if args.descriptors_dimension is None:
+            args.descriptors_dimension = 1280
         if args.image_size is None:
             args.image_size = [384, 384]
 

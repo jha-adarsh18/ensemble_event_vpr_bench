@@ -10,7 +10,7 @@ sys.path.append(str(project_root))
 from resizing_wrapper import ResizingWrapper
 
 try:
-    from vpr_models import apgem, clique_mining, convap, mixvpr, netvlad, sfrs, boq, dinomix, elitevpr
+    from vpr_models import apgem, clique_mining, convap, mixvpr, netvlad, sfrs, boq, dinomix, elitevpr, elitevpr_salad
 except ModuleNotFoundError:
     raise ModuleNotFoundError(
         "\n\nIf you're getting this error it's almost certainly because you ran "
@@ -71,7 +71,10 @@ def get_model(method, backbone=None, descriptors_dimension=None):
 
     elif method == "elitevpr":
         model = elitevpr.get_model()
-    
+
+    elif method == "elitevpr_salad":
+        model = elitevpr_salad.get_model()
+
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # model = model.to(device)
 
