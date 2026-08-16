@@ -19,6 +19,7 @@ def parse_arguments(method=None):
             "elitevpr",
             "elitevpr_salad",
             "elitevpr_nolinear",
+            "elitevpr_mix",
             "netvlad",
             "apgem",
             "sfrs",
@@ -200,6 +201,17 @@ def parse_arguments(method=None):
 
     elif args.method == "elitevpr":
         # single ViT-S student; GeM global descriptor == teacher_dim
+        if args.descriptors_dimension is None:
+            args.descriptors_dimension = 1024
+        if args.image_size is None:
+            args.image_size = [384, 384]
+
+    elif args.method == "elitevpr_mix":
+        # second student for model-diversity ensembling: same 1024-d GeM
+        # descriptor as elitevpr, different checkpoint
+        # (ELITEVPR_MIX_WEIGHTS). A distinct METHOD NAME is required
+        # because ablate_ensembles.py:414 keys each ensemble member's
+        # cached similarity matrix on it.
         if args.descriptors_dimension is None:
             args.descriptors_dimension = 1024
         if args.image_size is None:
